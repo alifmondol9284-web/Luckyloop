@@ -8,7 +8,7 @@ import functools
 
 print = functools.partial(print, flush=True)
 
-SERVER_URL = "https://luckyloop-q9kk.onrender.com"
+SERVER_URL = "https://luckyloop-ttrr.onrender.com"
 PHPSESSID  = os.environ.get("MW_PHPSESSID", "937nc972hqfn7vbija8ll69l67")
 
 # ── ntfy নোটিফিকেশন ──────────────────────────────────

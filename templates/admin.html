@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LuckyLoop — Admin Panel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+Bengali:wght@400;600&display=swap');
+
+  :root {
+    --bg:      #000000;
+    --card:    #0a0a0a;
+    --card2:   #111111;
+    --border:  #1e1e1e;
+    --accent:  #00e5ff;
+    --green:   #22c55e;
+    --yellow:  #facc15;
+    --red:     #ef4444;
+    --orange:  #f97316;
+    --text:    #e2e8f0;
+    --muted:   #475569;
+    --white:   #ffffff;
+    --purple:  #a78bfa;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace; min-height:100vh; }
+
+  #login-screen {
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh;
+    background:radial-gradient(ellipse at 50% 0%,#001a1f 0%,#000 60%);
+  }
+  .login-box {
+    background:var(--card); border:1px solid var(--border);
+    border-top:2px solid var(--accent); padding:48px 40px; width:380px; text-align:center;
+  }
+  .login-box .icon { font-size:42px; margin-bottom:12px; }
+  .login-box h1 { font-size:22px; color:var(--white); letter-spacing:3px; }
+  .login-box p  { color:var(--muted); font-size:11px; margin-top:4px; margin-bottom:32px; }
+  .login-box input {
+    width:100%; padding:14px 16px; background:var(--card2); border:1px solid var(--border);
+    color:var(--text); font-family:inherit; font-size:13px; outline:none; margin-bottom:16px; transition:border-color .2s;
+  }
+  .login-box input:focus { border-color:var(--accent); }
+  .login-box button {
+    width:100%; padding:14px; background:var(--accent); color:#000;
+    font-family:inherit; font-size:13px; font-weight:700; border:none; cursor:pointer; letter-spacing:1px; transition:opacity .2s;
+  }
+  .login-box button:hover { opacity:.85; }
+  .login-error { color:var(--red); font-size:11px; margin-top:10px; min-height:16px; }
+
+  #app { display:none; }
+
+  .header {
+    background:var(--card); border-bottom:1px solid var(--border);
+    padding:0 28px; display:flex; align-items:center; justify-content:space-between;
+    height:58px; position:sticky; top:0; z-index:100;
+  }
+  .header-left { display:flex; align-items:center; gap:10px; }
+  .header-left .logo { font-size:18px; font-weight:700; color:var(--white); letter-spacing:2px; }
+  .header-left .sub  { font-size:11px; color:var(--accent); }
+  .header-right { display:flex; align-items:center; gap:16px; }
+  .live-dot {
+    width:8px; height:8px; border-radius:50%; background:var(--green);
+    box-shadow:0 0 8px var(--green); animation:pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .last-sync { font-size:10px; color:var(--muted); }
+  .btn-logout {
+    padding:6px 14px; font-size:10px; font-family:inherit;
+    background:transparent; border:1px solid var(--border); color:var(--muted);
+    cursor:pointer; letter-spacing:1px; transition:all .2s;
+  }
+  .btn-logout:hover { border-color:var(--red); color:var(--red); }
+
+  .tabs { display:flex; border-bottom:1px solid var(--border); background:var(--card); padding:0 28px; }
+  .tab-btn {
+    padding:14px 22px; font-family:inherit; font-size:11px; font-weight:600;
+    letter-spacing:1px; color:var(--muted); background:transparent;
+    border:none; border-bottom:2px solid transparent; cursor:pointer; transition:all .2s;
+  }
+  .tab-btn:hover { color:var(--text); }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-btn.license-tab.active { color:var(--yellow); border-bottom-color:var(--yellow); }
+  .tab-btn.ann-tab.active { color:var(--orange); border-bottom-color:var(--orange); }
+
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  .stats-bar { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border-bottom:1px solid var(--border); }
+  .stat-card { background:var(--card); padding:20px 24px; }
+  .stat-card .label { font-size:9px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
+  .stat-card .value { font-size:28px; font-weight:700; }
+  .stat-card .value.total   { color:var(--accent); }
+  .stat-card .value.active  { color:var(--green); }
+  .stat-card .value.blocked { color:var(--red); }
+  .stat-card .value.online  { color:var(--yellow); }
+
+  .toolbar { padding:16px 28px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); }
+  .toolbar input {
+    flex:1; max-width:300px; padding:9px 14px; background:var(--card); border:1px solid var(--border);
+    color:var(--text); font-family:inherit; font-size:12px; outline:none; transition:border-color .2s;
+  }
+  .toolbar input:focus { border-color:var(--accent); }
+  .toolbar select { padding:9px 14px; background:var(--card); border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:12px; outline:none; cursor:pointer; }
+  .btn-refresh { padding:9px 18px; font-size:11px; font-family:inherit; font-weight:600; background:var(--accent); color:#000; border:none; cursor:pointer; letter-spacing:1px; transition:opacity .2s; }
+  .btn-refresh:hover { opacity:.85; }
+  .auto-label { font-size:10px; color:var(--muted); margin-left:auto; }
+
+  .table-wrap { padding:0 28px 40px; overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; margin-top:20px; }
+  thead tr { border-bottom:1px solid var(--border); }
+  thead th { text-align:left; padding:10px 14px; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
+  tbody tr:hover { background:var(--card); }
+  tbody td { padding:14px 14px; font-size:12px; vertical-align:middle; }
+
+  .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; font-size:10px; font-weight:700; letter-spacing:1px; }
+  .badge.active   { background:#052e16; color:var(--green); }
+  .badge.blocked  { background:#2d0707; color:var(--red); }
+  .badge.inactive { background:#1a1000; color:var(--orange); }
+  .badge.bound    { background:#0f1f14; color:var(--green); }
+  .badge.unbound  { background:#1a1a1a; color:var(--muted); }
+  .badge.expired  { background:#2d0707; color:var(--red); }
+  .badge-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+
+  .online-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .online-dot.yes { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .online-dot.no  { background:var(--muted); }
+
+  .device-name { color:var(--white); font-weight:600; font-size:13px; }
+  .device-alias { display:inline-block; background:#1a0f2e; color:var(--purple); border:1px solid #3b1f6e; font-size:10px; padding:1px 7px; margin-left:6px; border-radius:2px; letter-spacing:1px; vertical-align:middle; }
+  .device-id  { color:var(--muted); font-size:10px; margin-top:2px; font-family:monospace; }
+  .device-ip  { color:var(--muted); font-size:10px; }
+  .license-tag { display:inline-block; padding:2px 8px; font-size:9px; letter-spacing:1px; background:#0f1f14; color:var(--green); border:1px solid #1a3326; }
+
+  .btn-alias { padding:3px 8px; font-size:10px; font-family:inherit; background:transparent; border:1px solid #3b1f6e; color:var(--purple); cursor:pointer; transition:all .2s; margin-left:4px; vertical-align:middle; }
+  .btn-alias:hover { background:#1a0f2e; border-color:var(--purple); }
+  .btn-block   { padding:6px 14px; font-size:10px; font-family:inherit; font-weight:600; background:transparent; border:1px solid var(--red);   color:var(--red);   cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-block:hover   { background:var(--red);   color:#000; }
+  .btn-unblock { padding:6px 14px; font-size:10px; font-family:inherit; font-weight:600; background:transparent; border:1px solid var(--green); color:var(--green); cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-unblock:hover { background:var(--green); color:#000; }
+  .btn-delete  { padding:6px 10px; font-size:10px; font-family:inherit; background:transparent; border:1px solid var(--border); color:var(--muted); cursor:pointer; transition:all .2s; margin-left:4px; }
+  .btn-delete:hover  { border-color:var(--orange); color:var(--orange); }
+
+  .empty-row td { text-align:center; padding:60px; color:var(--muted); font-size:12px; }
+
+  /* ══ LICENSE BACKUP BAR ══ */
+  .ls-backup-bar {
+    background:#050d10; border:1px solid #0a2a35;
+    border-top:2px solid var(--accent);
+    padding:16px 24px; margin-bottom:20px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  }
+  .ls-backup-bar .ls-left .ls-title { font-size:9px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-bottom:5px; }
+  .ls-backup-bar .ls-left .ls-status { font-size:13px; font-weight:700; }
+  .ls-backup-bar .ls-left .ls-meta   { font-size:10px; color:var(--muted); margin-top:3px; }
+  .ls-btn-restore {
+    padding:9px 18px; font-size:10px; font-family:inherit; font-weight:700;
+    background:var(--accent); color:#000; border:none; cursor:pointer; letter-spacing:1px; transition:opacity .2s;
+  }
+  .ls-btn-restore:hover { opacity:.85; }
+  .ls-btn-restore:disabled { opacity:.35; cursor:not-allowed; }
+  .ls-btn-backup {
+    padding:9px 18px; font-size:10px; font-family:inherit; font-weight:700;
+    background:transparent; border:1px solid var(--green); color:var(--green); cursor:pointer; letter-spacing:1px; transition:all .2s;
+  }
+  .ls-btn-backup:hover { background:var(--green); color:#000; }
+  .ls-btn-clear {
+    padding:9px 14px; font-size:9px; font-family:inherit;
+    background:transparent; border:1px solid var(--border); color:var(--muted); cursor:pointer; transition:all .2s;
+  }
+  .ls-btn-clear:hover { border-color:var(--red); color:var(--red); }
+
+  /* ══ LICENSE PANEL ══ */
+  .license-panel { padding:28px; }
+  .license-generator { background:var(--card); border:1px solid var(--border); border-top:2px solid var(--yellow); padding:28px; margin-bottom:28px; }
+  .license-generator h2 { font-size:14px; font-weight:700; color:var(--yellow); letter-spacing:2px; margin-bottom:20px; }
+  .gen-form { display:grid; grid-template-columns:1fr 1fr 100px 130px 100px auto; gap:12px; align-items:end; }
+  .form-group label { display:block; font-size:9px; letter-spacing:1px; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+  .form-group input, .form-group select {
+    width:100%; padding:10px 14px; background:var(--card2); border:1px solid var(--border);
+    color:var(--text); font-family:inherit; font-size:12px; outline:none; transition:border-color .2s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color:var(--yellow); }
+  .btn-generate { padding:10px 24px; background:var(--yellow); color:#000; font-family:inherit; font-size:11px; font-weight:700; border:none; cursor:pointer; letter-spacing:1px; white-space:nowrap; transition:opacity .2s; height:40px; }
+  .btn-generate:hover { opacity:.85; }
+
+  .generated-output { display:none; margin-top:20px; background:var(--card2); border:1px solid var(--border); border-left:3px solid var(--yellow); padding:16px; }
+  .generated-output h3 { font-size:10px; color:var(--yellow); letter-spacing:2px; text-transform:uppercase; margin-bottom:12px; }
+  .key-list { list-style:none; }
+  .key-list li { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); font-size:12px; color:var(--green); font-family:monospace; }
+  .key-list li:last-child { border-bottom:none; }
+  .btn-copy-key { padding:4px 10px; font-size:9px; font-family:inherit; background:transparent; border:1px solid var(--green); color:var(--green); cursor:pointer; transition:all .2s; margin-left:8px; white-space:nowrap; }
+  .btn-copy-key:hover { background:var(--green); color:#000; }
+  .btn-copy-all { margin-top:12px; padding:8px 18px; font-size:10px; font-family:inherit; font-weight:600; background:transparent; border:1px solid var(--yellow); color:var(--yellow); cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-copy-all:hover { background:var(--yellow); color:#000; }
+
+  .license-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); margin-bottom:20px; }
+  .lic-stat { background:var(--card); padding:16px 20px; }
+  .lic-stat .label { font-size:9px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; }
+  .lic-stat .value { font-size:24px; font-weight:700; }
+  #license-thead th { color:var(--yellow); }
+  .key-text { font-family:monospace; font-size:11px; color:var(--green); word-break:break-all; }
+
+  .btn-unbind    { padding:5px 10px; font-size:9px; font-family:inherit; background:transparent; border:1px solid var(--orange); color:var(--orange); cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-unbind:hover { background:var(--orange); color:#000; }
+  .btn-toggle-off { padding:5px 10px; font-size:9px; font-family:inherit; background:transparent; border:1px solid var(--red);   color:var(--red);   cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-toggle-off:hover { background:var(--red);   color:#fff; }
+  .btn-toggle-on  { padding:5px 10px; font-size:9px; font-family:inherit; background:transparent; border:1px solid var(--green); color:var(--green); cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-toggle-on:hover  { background:var(--green); color:#000; }
+  .btn-edit { padding:5px 10px; font-size:9px; font-family:inherit; background:transparent; border:1px solid var(--purple); color:var(--purple); cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-edit:hover { background:var(--purple); color:#000; }
+
+  .license-toolbar { padding:14px 0; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+  .license-toolbar input { flex:1; max-width:280px; padding:8px 12px; background:var(--card); border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:11px; outline:none; transition:border-color .2s; }
+  .license-toolbar input:focus { border-color:var(--yellow); }
+  .license-toolbar select { padding:8px 12px; background:var(--card); border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:11px; outline:none; cursor:pointer; }
+  .btn-refresh-lic { padding:8px 16px; font-size:10px; font-family:inherit; font-weight:600; background:var(--yellow); color:#000; border:none; cursor:pointer; letter-spacing:1px; transition:opacity .2s; }
+  .btn-refresh-lic:hover { opacity:.85; }
+
+  .days-pill { display:inline-block; padding:2px 10px; font-size:10px; font-weight:700; letter-spacing:1px; border-radius:2px; }
+  .days-pill.ok       { background:#052e16; color:var(--green);  border:1px solid #166534; }
+  .days-pill.warn     { background:#1a1000; color:var(--orange); border:1px solid #7c3a00; }
+  .days-pill.lifetime { background:#0a1a2e; color:var(--accent); border:1px solid #0e4f6b; }
+  .days-pill.expired  { background:#2d0707; color:#888;          border:1px solid #400; }
+
+  /* ══ ANNOUNCEMENT ══ */
+  .ann-panel { padding:28px; }
+  .ann-card { background:var(--card); border:1px solid var(--border); border-top:2px solid var(--orange); padding:28px; margin-bottom:24px; }
+  .ann-card h2 { font-size:14px; font-weight:700; color:var(--orange); letter-spacing:2px; margin-bottom:8px; }
+  .ann-card .desc { font-size:11px; color:var(--muted); margin-bottom:24px; line-height:1.7; }
+  .ann-status-box { background:var(--card2); border:1px solid var(--border); padding:16px 20px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; }
+  .ann-status-label { font-size:9px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
+  .ann-status-text  { font-size:14px; font-weight:700; color:var(--muted); }
+  .ann-badge { padding:8px 20px; font-size:12px; font-weight:700; letter-spacing:2px; background:#1a1a1a; color:var(--muted); }
+  .ann-form-label { font-size:9px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; display:block; }
+  .ann-textarea { width:100%; padding:12px 14px; background:var(--card2); border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:13px; outline:none; resize:vertical; transition:border-color .2s; min-height:90px; }
+  .ann-textarea:focus { border-color:var(--orange); }
+  .ann-preview-wrap { margin:20px 0; }
+  .ann-preview-label { font-size:9px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; }
+  .ann-preview-box { background:#3d1a00; border-left:3px solid var(--orange); padding:13px 16px; display:flex; align-items:flex-start; gap:10px; }
+  .ann-preview-icon { color:#fdba74; font-size:15px; margin-top:1px; flex-shrink:0; }
+  .ann-preview-text { color:#fed7aa; font-size:12px; font-family:'JetBrains Mono',monospace; line-height:1.5; }
+  .ann-btn-row { display:flex; gap:12px; flex-wrap:wrap; margin-top:4px; }
+  .btn-ann-on  { padding:11px 28px; font-family:inherit; font-size:11px; font-weight:700; background:var(--green); color:#000; border:none; cursor:pointer; letter-spacing:1px; transition:opacity .2s; }
+  .btn-ann-on:hover { opacity:.85; }
+  .btn-ann-off { padding:11px 28px; font-family:inherit; font-size:11px; font-weight:700; background:transparent; border:1px solid var(--red); color:var(--red); cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-ann-off:hover { background:var(--red); color:#fff; }
+  .btn-ann-refresh { padding:11px 18px; font-family:inherit; font-size:11px; background:transparent; border:1px solid var(--border); color:var(--muted); cursor:pointer; letter-spacing:1px; transition:all .2s; }
+  .btn-ann-refresh:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* ══ MODALS ══ */
+  #toast { position:fixed; bottom:28px; right:28px; padding:12px 20px; font-size:12px; font-family:inherit; background:var(--card2); border-left:3px solid var(--green); color:var(--text); pointer-events:none; opacity:0; transform:translateY(12px); transition:all .3s; z-index:9999; }
+  #toast.show { opacity:1; transform:translateY(0); }
+  #toast.error { border-left-color:var(--red); }
+
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:200; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:var(--card); border:1px solid var(--border); border-top:2px solid var(--red); padding:32px; width:420px; }
+  .modal h3 { font-size:15px; color:var(--white); margin-bottom:6px; }
+  .modal p  { font-size:11px; color:var(--muted); margin-bottom:20px; }
+  .modal input, .modal select { width:100%; padding:12px 14px; background:var(--card2); border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:12px; outline:none; margin-bottom:12px; }
+  .modal input:focus, .modal select:focus { border-color:var(--red); }
+  .modal label { font-size:9px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; display:block; margin-bottom:5px; }
+  .modal-btns { display:flex; gap:10px; margin-top:8px; }
+  .modal-btns button { flex:1; padding:11px; font-family:inherit; font-size:11px; font-weight:700; cursor:pointer; border:none; letter-spacing:1px; }
+  .btn-confirm-block { background:var(--red); color:#fff; }
+  .btn-cancel { background:var(--card2); color:var(--muted); border:1px solid var(--border) !important; }
+
+  .btn-confirm-alias { background:var(--purple) !important; color:#000 !important; }
+  .btn-clear-alias { flex:0 0 auto !important; padding:11px 14px !important; background:transparent !important; border:1px solid var(--border) !important; color:var(--muted) !important; font-size:10px !important; cursor:pointer; font-family:inherit; letter-spacing:1px; }
+  .btn-clear-alias:hover { border-color:var(--orange) !important; color:var(--orange) !important; }
+
+  .btn-confirm-edit { background:var(--yellow) !important; color:#000 !important; }
+  .validity-help { font-size:10px; color:var(--muted); margin-top:-6px; margin-bottom:12px; }
+
+  @media (max-width:1100px) { .gen-form { grid-template-columns:1fr 1fr 1fr; } }
+  @media (max-width:900px) {
+    .stats-bar { grid-template-columns:repeat(2,1fr); }
+    .gen-form { grid-template-columns:1fr 1fr; }
+    .table-wrap { padding:0 12px 40px; }
+    .toolbar, .license-panel, .ann-panel { padding:12px; }
+    .header { padding:0 14px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="icon">⚡</div>
+    <h1>LUCKYLOOP</h1>
+    <p>ADMIN PANEL · DEVICE MANAGER</p>
+    <input type="password" id="pw-input" placeholder="Admin Password লিখুন…"/>
+    <button onclick="doLogin()">→ প্রবেশ করুন</button>
+    <div class="login-error" id="login-err"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div class="header">
+    <div class="header-left">
+      <span style="color:var(--yellow);font-size:20px">⚡</span>
+      <div><div class="logo">LUCKYLOOP</div><div class="sub">ADMIN · DEVICE MANAGER</div></div>
+    </div>
+    <div class="header-right">
+      <div class="live-dot"></div>
+      <span class="last-sync" id="last-sync">—</span>
+      <button class="btn-logout" onclick="doLogout()">LOGOUT</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active"      onclick="switchTab('devices')">📱 Device Manager</button>
+    <button class="tab-btn license-tab" onclick="switchTab('licenses')">🔑 License Keys</button>
+    <button class="tab-btn ann-tab"     onclick="switchTab('announcement')">📢 Announcement</button>
+  </div>
+
+  <!-- TAB: DEVICES -->
+  <div id="tab-devices" class="tab-content active">
+    <div class="stats-bar">
+      <div class="stat-card"><div class="label">Total Devices</div><div class="value total" id="stat-total">0</div></div>
+      <div class="stat-card"><div class="label">Active</div><div class="value active" id="stat-active">0</div></div>
+      <div class="stat-card"><div class="label">Blocked</div><div class="value blocked" id="stat-blocked">0</div></div>
+      <div class="stat-card"><div class="label">Online (5 min)</div><div class="value online" id="stat-online">0</div></div>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="search-box" placeholder="🔍  Device name বা ID দিয়ে খুঁজুন…" oninput="renderTable()"/>
+      <select id="filter-status" onchange="renderTable()">
+        <option value="all">সব দেখান</option>
+        <option value="active">শুধু Active</option>
+        <option value="blocked">শুধু Blocked</option>
+        <option value="online">Online (5 min)</option>
+      </select>
+      <button class="btn-refresh" onclick="loadDevices()">↻ Refresh</button>
+      <span class="auto-label" id="auto-label">Auto refresh: 15s</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Device</th><th>License</th><th>IP Address</th><th>First Seen</th><th>Last Seen</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="device-table-body"><tr class="empty-row"><td colspan="8">⏳ Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: LICENSES -->
+  <div id="tab-licenses" class="tab-content">
+    <div class="license-panel">
+
+      <!-- ✅ localStorage BACKUP BAR -->
+      <div class="ls-backup-bar">
+        <div class="ls-left">
+          <div class="ls-title">💾 LOCAL BACKUP STATUS</div>
+          <div class="ls-status" id="ls-status-text" style="color:var(--yellow)">⏳ Checking...</div>
+          <div class="ls-meta"  id="ls-meta"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="ls-btn-restore" id="ls-restore-btn" onclick="lsRestoreToServer()" disabled>⬆ Server এ Restore করুন</button>
+          <button class="ls-btn-backup"  onclick="lsManualBackup()">💾 এখনই Backup নিন</button>
+          <button class="ls-btn-clear"   onclick="lsClearBackup()">🗑 Backup মুছুন</button>
+        </div>
+      </div>
+
+      <div class="license-generator">
+        <h2>🔑 LICENSE KEY GENERATOR</h2>
+        <div class="gen-form">
+          <div class="form-group">
+            <label>Display Name (App-এ দেখাবে) *</label>
+            <input type="text" id="gen-display-name" placeholder="যেমন: Rahim Uddin, emdadul2962…" maxlength="40"/>
+          </div>
+          <div class="form-group">
+            <label>Label / Internal Note</label>
+            <input type="text" id="gen-label" placeholder="যেমন: Office01, Premium…" maxlength="40"/>
+          </div>
+          <div class="form-group">
+            <label>Validity (Days)</label>
+            <input type="number" id="gen-validity" placeholder="খালি = Lifetime" min="1" max="3650"/>
+          </div>
+          <div class="form-group">
+            <label>Max Devices</label>
+            <select id="gen-max-devices">
+              <option value="1">1 Device</option>
+              <option value="3">3 Devices</option>
+              <option value="5">5 Devices</option>
+              <option value="999">Unlimited</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Count</label>
+            <input type="number" id="gen-count" value="1" min="1" max="50" style="width:100%"/>
+          </div>
+          <button class="btn-generate" onclick="generateKeys()">⚡ Generate</button>
+        </div>
+        <div style="margin-top:10px;font-size:10px;color:var(--muted)">
+          💡 <strong style="color:var(--yellow)">Display Name</strong> = App-এ "Hi Rahim Uddin" হিসেবে দেখাবে।
+          <strong style="color:var(--accent)">Validity</strong> = activate করার দিন থেকে count শুরু। খালি রাখলে Lifetime।
+        </div>
+        <div class="generated-output" id="generated-output">
+          <h3>✅ Generated Keys</h3>
+          <ul class="key-list" id="key-list"></ul>
+          <button class="btn-copy-all" onclick="copyAllKeys()">📋 সব Copy করুন</button>
+        </div>
+      </div>
+
+      <div class="license-stats">
+        <div class="lic-stat"><div class="label">Total Keys</div><div class="value total" id="lic-total">0</div></div>
+        <div class="lic-stat"><div class="label">Activated</div><div class="value active" id="lic-activated">0</div></div>
+        <div class="lic-stat"><div class="label">Unused</div><div class="value online" id="lic-unused">0</div></div>
+        <div class="lic-stat"><div class="label">Expired</div><div class="value blocked" id="lic-expired">0</div></div>
+      </div>
+
+      <div class="license-toolbar">
+        <input type="text" id="lic-search" placeholder="🔍 Key, Name বা Label খুঁজুন…" oninput="renderLicenseTable()"/>
+        <select id="lic-filter" onchange="renderLicenseTable()">
+          <option value="all">সব দেখান</option>
+          <option value="active">শুধু Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="bound">Activated (Bound)</option>
+          <option value="unbound">Unused (Unbound)</option>
+          <option value="expired">Expired</option>
+          <option value="expiring">Expiring Soon (≤7 days)</option>
+        </select>
+        <button class="btn-refresh-lic" onclick="loadLicenses()">↻ Refresh</button>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table>
+          <thead id="license-thead">
+            <tr><th>#</th><th>License Key</th><th>Display Name</th><th>Label</th><th>Validity</th><th>Bound Device</th><th>Created</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="license-table-body"><tr class="empty-row"><td colspan="9">⏳ Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: ANNOUNCEMENT -->
+  <div id="tab-announcement" class="tab-content">
+    <div class="ann-panel">
+      <div class="ann-card">
+        <h2>📢 APP ANNOUNCEMENT BANNER</h2>
+        <p class="desc">
+          এই message <strong style="color:var(--green)">ON</strong> করলে সব user-এর app-এ task list-এর উপরে দেখাবে।<br>
+          <strong style="color:var(--red)">OFF</strong> করলে app আবার স্বাভাবিকভাবে চলবে।
+        </p>
+        <div class="ann-status-box">
+          <div>
+            <div class="ann-status-label">Current Status</div>
+            <div class="ann-status-text" id="ann-status-text">Loading...</div>
+          </div>
+          <div class="ann-badge" id="ann-badge">OFF</div>
+        </div>
+        <label class="ann-form-label">Banner Message</label>
+        <textarea class="ann-textarea" id="ann-message" oninput="updateAnnPreview()" placeholder="যেমন: Server Is Down! Please wait..."></textarea>
+        <div class="ann-preview-wrap">
+          <div class="ann-preview-label">App-এ যেভাবে দেখাবে (Preview)</div>
+          <div class="ann-preview-box">
+            <span class="ann-preview-icon">⚠</span>
+            <span class="ann-preview-text" id="ann-preview">এখানে আপনার message দেখাবে...</span>
+          </div>
+        </div>
+        <div class="ann-btn-row">
+          <button class="btn-ann-on"      onclick="saveAnnouncement(true)">✅ Save &amp; Turn ON</button>
+          <button class="btn-ann-off"     onclick="saveAnnouncement(false)">⛔ Turn OFF</button>
+          <button class="btn-ann-refresh" onclick="loadAnnouncement()">↻ Refresh Status</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Block Modal -->
+<div class="modal-overlay" id="block-modal">
+  <div class="modal">
+    <h3>🚫 Device Block করুন</h3>
+    <p id="modal-device-info">Device: —</p>
+    <label>Block করার কারণ (optional)</label>
+    <input type="text" id="block-reason-input" placeholder="কারণ লিখুন…" maxlength="200"/>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">বাতিল</button>
+      <button class="btn-confirm-block" onclick="confirmBlock()">Block করুন</button>
+    </div>
+  </div>
+</div>
+
+<!-- Alias Modal -->
+<div class="modal-overlay" id="alias-modal">
+  <div class="modal" style="border-top-color:var(--purple)">
+    <h3>✏️ Device Label দিন</h3>
+    <p id="alias-modal-info" style="color:var(--muted);font-size:11px;margin-bottom:20px">Device: —</p>
+    <input type="text" id="alias-input" placeholder="যেমন: Alif, Rahim, Office PC…" maxlength="40"/>
+    <div style="font-size:10px;color:var(--muted);margin-top:-6px;margin-bottom:16px">💡 এই label শুধু আপনার browser এ save হবে।</div>
+    <div class="modal-btns">
+      <button class="btn-clear-alias" onclick="clearAlias()">🗑 Label মুছুন</button>
+      <button class="btn-cancel" onclick="closeAliasModal()">বাতিল</button>
+      <button class="btn-confirm-alias" onclick="confirmAlias()">✓ Save করুন</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit License Modal -->
+<div class="modal-overlay" id="edit-lic-modal">
+  <div class="modal" style="border-top-color:var(--yellow);width:500px">
+    <h3>✏️ License Edit করুন</h3>
+    <p id="edit-lic-key-info" style="color:var(--muted);font-size:10px;margin-bottom:16px;word-break:break-all">Key: —</p>
+    <label>Display Name (App-এ "Hi ___" হিসেবে দেখাবে)</label>
+    <input type="text" id="edit-display-name" placeholder="যেমন: Rahim Uddin" maxlength="40" style="border-color:var(--yellow)"/>
+    <label>Label / Internal Note</label>
+    <input type="text" id="edit-label" placeholder="যেমন: Premium, Office01" maxlength="40"/>
+    <label>Validity Days (activate করার দিন থেকে)</label>
+    <input type="number" id="edit-validity-days" placeholder="খালি = Lifetime" min="1" max="3650"/>
+    <div class="validity-help">💡 যদি ইতিমধ্যে activate হয়ে থাকে, expires_at সরাসরি দিন নিচে।</div>
+    <label>Fixed Expiry Date (optional, YYYY-MM-DD)</label>
+    <input type="date" id="edit-expires-at"/>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeEditModal()">বাতিল</button>
+      <button class="btn-confirm-edit" onclick="confirmEditLicense()">✓ Save করুন</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const BASE = window.location.origin;
+  let adminPw        = '';
+  let allDevices     = [];
+  let allLicenses    = [];
+  let lastGenKeys    = [];
+  let pendingBlockId = '';
+  let pendingAliasId = '';
+  let pendingEditKey = '';
+  let autoTimer      = null;
+  let countdown      = 15;
+
+  // ══════════════════════════════════════════════════════
+  //  localStorage BACKUP SYSTEM
+  // ══════════════════════════════════════════════════════
+  const LS_KEY      = 'luckyloop_license_backup';
+  const LS_META_KEY = 'luckyloop_license_backup_meta';
+
+  function lsSaveBackup(licenses) {
+    try {
+      localStorage.setItem(LS_KEY,      JSON.stringify(licenses));
+      localStorage.setItem(LS_META_KEY, JSON.stringify({ saved_at: new Date().toISOString(), count: licenses.length }));
+      lsUpdateStatusUI();
+    } catch(e) { console.error('[LS] Save failed:', e); }
+  }
+
+  function lsLoadBackup() {
+    try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+  }
+
+  function lsUpdateStatusUI() {
+    const statusEl = document.getElementById('ls-status-text');
+    const metaEl   = document.getElementById('ls-meta');
+    const restBtn  = document.getElementById('ls-restore-btn');
+    if (!statusEl) return;
+
+    const backup = lsLoadBackup();
+    const meta   = (() => { try { return JSON.parse(localStorage.getItem(LS_META_KEY) || 'null'); } catch { return null; } })();
+
+    if (!backup || !backup.length) {
+      statusEl.textContent  = '⚠ কোনো backup নেই';
+      statusEl.style.color  = 'var(--red)';
+      metaEl.textContent    = 'License Keys tab খুলুন — auto backup হবে';
+      restBtn.disabled      = true;
+      return;
+    }
+    const savedAt = meta?.saved_at
+      ? new Date(meta.saved_at).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+      : '—';
+    statusEl.textContent  = `✅ ${backup.length} টি license key backup আছে`;
+    statusEl.style.color  = 'var(--green)';
+    metaEl.textContent    = `Last backup: ${savedAt}`;
+    restBtn.disabled      = false;
+  }
+
+  function lsManualBackup() {
+    if (!adminPw) { showToast('❌ Login করুন আগে', true); return; }
+    fetch(`${BASE}/api/admin/licenses?password=${encodeURIComponent(adminPw)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!Array.isArray(data)) { showToast('❌ Data পাওয়া যায়নি', true); return; }
+        lsSaveBackup(data);
+        showToast(`✅ ${data.length} টি key backup হয়েছে!`);
+      })
+      .catch(() => showToast('❌ Server error', true));
+  }
+
+  async function lsRestoreToServer() {
+    const backup = lsLoadBackup();
+    if (!backup || !backup.length) { showToast('❌ কোনো backup নেই!', true); return; }
+    if (!adminPw) { showToast('❌ Login করুন আগে', true); return; }
+    if (!confirm(`${backup.length} টি license key server এ restore করবেন?\n\nNote: যে keys server এ আছে সেগুলো unchanged থাকবে।`)) return;
+
+    const btn = document.getElementById('ls-restore-btn');
+    btn.textContent = '⏳ Restoring...';
+    btn.disabled    = true;
+
+    let restored = 0, skipped = 0, failed = 0;
+
+    // Get existing server keys
+    let serverKeys = new Set();
+    try {
+      const res  = await fetch(`${BASE}/api/admin/licenses?password=${encodeURIComponent(adminPw)}`);
+      const data = await res.json();
+      if (Array.isArray(data)) data.forEach(l => serverKeys.add(l.license_key));
+    } catch {}
+
+    for (const lic of backup) {
+      if (serverKeys.has(lic.license_key)) { skipped++; continue; }
+      try {
+        const res = await fetch(`${BASE}/api/admin/licenses/restore?password=${encodeURIComponent(adminPw)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(lic)
+        });
+        const d = await res.json();
+        if (d.ok) restored++; else failed++;
+      } catch { failed++; }
+    }
+
+    btn.textContent = '⬆ Server এ Restore করুন';
+    btn.disabled    = false;
+    showToast(`✅ Restored: ${restored} | Skipped: ${skipped} | Failed: ${failed}`);
+    loadLicenses();
+  }
+
+  function lsClearBackup() {
+    if (!confirm('Backup মুছে দেবেন? এটা করলে পরে restore করতে পারবেন না।')) return;
+    localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(LS_META_KEY);
+    lsUpdateStatusUI();
+    showToast('🗑 Backup মুছে ফেলা হয়েছে');
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  TABS
+  // ══════════════════════════════════════════════════════
+  function switchTab(name) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    const btns = document.querySelectorAll('.tab-btn');
+    if (name === 'devices')      { btns[0].classList.add('active'); }
+    if (name === 'licenses')     { btns[1].classList.add('active'); loadLicenses(); }
+    if (name === 'announcement') { btns[2].classList.add('active'); loadAnnouncement(); }
+  }
+
+  // ── ALIAS ─────────────────────────────────────────────
+  const ALIAS_KEY = 'luckyloop_aliases';
+  function loadAliases() { try { return JSON.parse(localStorage.getItem(ALIAS_KEY) || '{}'); } catch { return {}; } }
+  function saveAlias(deviceId, alias) {
+    const aliases = loadAliases();
+    if (alias) aliases[deviceId] = alias; else delete aliases[deviceId];
+    localStorage.setItem(ALIAS_KEY, JSON.stringify(aliases));
+  }
+  function getAlias(deviceId) { return loadAliases()[deviceId] || ''; }
+
+  // ── LOGIN ─────────────────────────────────────────────
+  document.getElementById('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  function doLogin() {
+    const pw = document.getElementById('pw-input').value.trim();
+    if (!pw) { showLoginErr('Password দিন!'); return; }
+    adminPw = pw;
+    fetch(`${BASE}/api/admin/devices`, { headers: { 'X-Admin-Password': adminPw } })
+    .then(r => {
+      if (r.status === 401) { showLoginErr('❌ Wrong password!'); adminPw = ''; return; }
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      loadDevices();
+      startAutoRefresh();
+      lsUpdateStatusUI();
+    }).catch(() => showLoginErr('❌ Server error!'));
+  }
+
+  function showLoginErr(msg) {
+    document.getElementById('login-err').textContent = msg;
+    setTimeout(() => document.getElementById('login-err').textContent = '', 3000);
+  }
+
+  function doLogout() {
+    adminPw = ''; clearInterval(autoTimer);
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('pw-input').value = '';
+  }
+
+  // ── DEVICES ───────────────────────────────────────────
+  function loadDevices() {
+    fetch(`${BASE}/api/admin/devices`, { headers: { 'X-Admin-Password': adminPw } })
+    .then(r => r.json())
+    .then(data => {
+      allDevices = data; updateStats(data); renderTable();
+      document.getElementById('last-sync').textContent =
+        'Last sync: ' + new Date().toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    })
+    .catch(() => showToast('❌ Server connect করতে পারছি না', true));
+  }
+
+  function startAutoRefresh() {
+    countdown = 15; clearInterval(autoTimer);
+    autoTimer = setInterval(() => {
+      countdown--;
+      document.getElementById('auto-label').textContent = `Auto refresh: ${countdown}s`;
+      if (countdown <= 0) { loadDevices(); countdown = 15; }
+    }, 1000);
+  }
+
+  function updateStats(devices) {
+    const now = Date.now();
+    const blocked = devices.filter(d => d.is_blocked).length;
+    const online  = devices.filter(d => d.last_seen && (now - new Date(d.last_seen).getTime()) / 1000 < 300).length;
+    document.getElementById('stat-total').textContent   = devices.length;
+    document.getElementById('stat-active').textContent  = devices.length - blocked;
+    document.getElementById('stat-blocked').textContent = blocked;
+    document.getElementById('stat-online').textContent  = online;
+  }
+
+  let currentList = [];
+  function renderTable() {
+    const q      = document.getElementById('search-box').value.toLowerCase();
+    const filter = document.getElementById('filter-status').value;
+    const now    = Date.now();
+    const aliases = loadAliases();
+
+    currentList = allDevices.filter(d => {
+      const alias  = aliases[d.device_id] || '';
+      const matchQ = !q ||
+        (d.device_name || '').toLowerCase().includes(q) ||
+        (d.device_id   || '').toLowerCase().includes(q) ||
+        (d.license_key || '').toLowerCase().includes(q) ||
+        alias.toLowerCase().includes(q);
+      if (!matchQ) return false;
+      if (filter === 'blocked') return d.is_blocked;
+      if (filter === 'active')  return !d.is_blocked;
+      if (filter === 'online')  return d.last_seen && (now - new Date(d.last_seen).getTime()) / 1000 < 300;
+      return true;
+    });
+
+    const tbody = document.getElementById('device-table-body');
+    if (!currentList.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">কোনো device পাওয়া যায়নি।</td></tr>'; return; }
+
+    tbody.innerHTML = currentList.map((d, i) => {
+      const isOnline   = d.last_seen ? (now - new Date(d.last_seen).getTime()) / 1000 < 300 : false;
+      const alias      = aliases[d.device_id] || '';
+      const aliasBadge = alias ? `<span class="device-alias">👤 ${escHtml(alias)}</span>` : '';
+      const statusBadge = d.is_blocked
+        ? '<span class="badge blocked"><span class="badge-dot"></span>BLOCKED</span>'
+        : '<span class="badge active"><span class="badge-dot"></span>ACTIVE</span>';
+      const actionBtn = d.is_blocked
+        ? `<button class="btn-unblock" onclick="unblockByIndex(${i})">✓ Unblock</button>`
+        : `<button class="btn-block"   onclick="openBlockByIndex(${i})">✕ Block</button>`;
+      const blockReasonHtml = d.is_blocked && d.block_reason
+        ? `<div style="font-size:10px;color:var(--red);margin-top:3px">💬 ${escHtml(d.block_reason)}</div>` : '';
+
+      return '<tr>'
+        + `<td style="color:var(--muted);font-size:11px">${i+1}</td>`
+        + '<td><div style="display:flex;align-items:flex-start;gap:8px">'
+        + `<span class="online-dot ${isOnline?'yes':'no'}" style="margin-top:3px"></span><div>`
+        + `<div class="device-name">${escHtml(d.device_name||'Unknown')}${aliasBadge}`
+        + `<button class="btn-alias" onclick="openAliasModal(${i})">✏️</button></div>`
+        + `<div class="device-id">${escHtml(d.device_id||'—')}</div>`
+        + blockReasonHtml + '</div></div></td>'
+        + `<td><span class="license-tag">${escHtml((d.license_type||'').split('(')[0].trim()||'Unknown')}</span></td>`
+        + `<td class="device-ip">${escHtml(d.ip_address||'—')}</td>`
+        + `<td style="color:var(--muted);font-size:11px">${fmtTime(d.first_seen)}</td>`
+        + `<td style="color:${isOnline?'var(--green)':'var(--muted)'};font-size:11px">${fmtAgo(d.last_seen)}</td>`
+        + '<td>' + statusBadge + '</td>'
+        + `<td style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${actionBtn}`
+        + `<button class="btn-delete" onclick="deleteByIndex(${i})">🗑</button></td></tr>`;
+    }).join('');
+  }
+
+  function openBlockByIndex(i)  { const d = currentList[i]; if (d) openBlockModal(d.device_id, d.device_name); }
+  function unblockByIndex(i)    { const d = currentList[i]; if (d) unblockDevice(d.device_id); }
+  function deleteByIndex(i)     { const d = currentList[i]; if (d) deleteDevice(d.device_id); }
+
+  function openAliasModal(i) {
+    const d = currentList[i]; if (!d) return;
+    pendingAliasId = d.device_id;
+    document.getElementById('alias-modal-info').textContent = 'Device: ' + (d.device_name||'Unknown') + ' · ' + d.device_id;
+    document.getElementById('alias-input').value = getAlias(d.device_id);
+    document.getElementById('alias-modal').classList.add('open');
+    setTimeout(() => document.getElementById('alias-input').focus(), 100);
+  }
+  function closeAliasModal() { document.getElementById('alias-modal').classList.remove('open'); pendingAliasId = ''; }
+  function confirmAlias() {
+    const alias = document.getElementById('alias-input').value.trim();
+    if (!pendingAliasId) { closeAliasModal(); return; }
+    saveAlias(pendingAliasId, alias); closeAliasModal(); renderTable();
+    showToast(alias ? '✅ Label save হয়েছে: ' + alias : '🗑 Label মুছে ফেলা হয়েছে');
+  }
+  function clearAlias() {
+    if (!pendingAliasId) { closeAliasModal(); return; }
+    saveAlias(pendingAliasId, ''); closeAliasModal(); renderTable();
+    showToast('🗑 Label মুছে ফেলা হয়েছে');
+  }
+  document.getElementById('alias-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirmAlias(); if (e.key === 'Escape') closeAliasModal();
+  });
+
+  function openBlockModal(deviceId, deviceName) {
+    pendingBlockId = deviceId;
+    document.getElementById('modal-device-info').textContent = 'Device: ' + (deviceName||'Unknown') + ' (' + deviceId + ')';
+    document.getElementById('block-reason-input').value = '';
+    document.getElementById('block-modal').classList.add('open');
+    setTimeout(() => document.getElementById('block-reason-input').focus(), 100);
+  }
+  function closeModal() { document.getElementById('block-modal').classList.remove('open'); pendingBlockId = ''; }
+  document.getElementById('block-reason-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirmBlock(); if (e.key === 'Escape') closeModal();
+  });
+  function confirmBlock() {
+    const info  = document.getElementById('modal-device-info').textContent;
+    const match = info.match(/\(([^)]+)\)$/);
+    const deviceId = match ? match[1].trim() : pendingBlockId;
+    const reason   = document.getElementById('block-reason-input').value.trim() || 'Admin কর্তৃক block করা হয়েছে';
+    closeModal(); blockDevice(deviceId, reason);
+  }
+
+  function blockDevice(deviceId, reason) {
+    fetch(`${BASE}/api/admin/block?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({device_id:deviceId, reason})
+    }).then(r => r.json()).then(d => { if (d.error) { showToast('❌ '+d.error,true); return; } showToast('🚫 Device block করা হয়েছে'); loadDevices(); })
+    .catch(() => showToast('❌ Error হয়েছে', true));
+  }
+  function unblockDevice(deviceId) {
+    fetch(`${BASE}/api/admin/unblock?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({device_id:deviceId})
+    }).then(r => r.json()).then(d => { if (d.error) { showToast('❌ '+d.error,true); return; } showToast('✅ Device unblock করা হয়েছে'); loadDevices(); })
+    .catch(() => showToast('❌ Error হয়েছে', true));
+  }
+  function deleteDevice(deviceId) {
+    if (!confirm('এই device টা permanently delete করবেন?')) return;
+    fetch(`${BASE}/api/admin/delete?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({device_id:deviceId})
+    }).then(r => r.json()).then(d => { if (d.error) { showToast('❌ '+d.error,true); return; } showToast('🗑 Device delete করা হয়েছে'); loadDevices(); })
+    .catch(() => showToast('❌ Error হয়েছে', true));
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  LICENSE SYSTEM
+  // ══════════════════════════════════════════════════════
+  function generateKeys() {
+    const displayName  = document.getElementById('gen-display-name').value.trim();
+    const label        = document.getElementById('gen-label').value.trim();
+    const maxDevices   = parseInt(document.getElementById('gen-max-devices').value);
+    const count        = Math.max(1, Math.min(50, parseInt(document.getElementById('gen-count').value) || 1));
+    const validityRaw  = document.getElementById('gen-validity').value.trim();
+    const validityDays = validityRaw ? parseInt(validityRaw) : null;
+
+    fetch(`${BASE}/api/admin/licenses/generate?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({label, display_name:displayName, max_devices:maxDevices, count, validity_days:validityDays})
+    }).then(r => r.json()).then(data => {
+      if (data.error) { showToast('❌ '+data.error,true); return; }
+      lastGenKeys = data.keys || [];
+      document.getElementById('generated-output').style.display = 'block';
+      document.getElementById('key-list').innerHTML = lastGenKeys.map(k =>
+        `<li><span>${k}</span><button class="btn-copy-key" onclick="copyKey('${k}',this)">📋 Copy</button></li>`
+      ).join('');
+      showToast(`✅ ${lastGenKeys.length} টি key generate হয়েছে`);
+      loadLicenses();
+    }).catch(() => showToast('❌ Generate করতে পারছি না', true));
+  }
+
+  function copyKey(key, btn) {
+    navigator.clipboard.writeText(key).then(() => {
+      const orig = btn.textContent; btn.textContent = '✓ Copied!';
+      btn.style.background = 'var(--green)'; btn.style.color = '#000';
+      setTimeout(() => { btn.textContent = orig; btn.style.background = ''; btn.style.color = ''; }, 1500);
+    });
+  }
+  function copyAllKeys() {
+    if (!lastGenKeys.length) return;
+    navigator.clipboard.writeText(lastGenKeys.join('\n')).then(() => showToast(`📋 ${lastGenKeys.length} টি key copy হয়েছে`));
+  }
+
+  function loadLicenses() {
+    fetch(`${BASE}/api/admin/licenses?password=${encodeURIComponent(adminPw)}`)
+    .then(r => r.json())
+    .then(data => {
+      allLicenses = Array.isArray(data) ? data : [];
+      updateLicenseStats(allLicenses);
+      renderLicenseTable();
+      // ✅ Auto-backup every time licenses load
+      if (allLicenses.length > 0) lsSaveBackup(allLicenses);
+    })
+    .catch(() => showToast('❌ Licenses load করতে পারছি না', true));
+  }
+
+  function updateLicenseStats(licenses) {
+    const activated = licenses.filter(l => l.bound_device).length;
+    const expired   = licenses.filter(l => l.days_left !== null && l.days_left !== undefined && l.days_left < 0).length;
+    document.getElementById('lic-total').textContent     = licenses.length;
+    document.getElementById('lic-activated').textContent = activated;
+    document.getElementById('lic-unused').textContent    = licenses.length - activated;
+    document.getElementById('lic-expired').textContent   = expired;
+  }
+
+  let currentLicList = [];
+  function renderLicenseTable() {
+    const q      = (document.getElementById('lic-search').value || '').toLowerCase();
+    const filter = document.getElementById('lic-filter').value;
+
+    currentLicList = allLicenses.filter(l => {
+      const matchQ = !q ||
+        (l.license_key  || '').toLowerCase().includes(q) ||
+        (l.label        || '').toLowerCase().includes(q) ||
+        (l.display_name || '').toLowerCase().includes(q) ||
+        (l.bound_device || '').toLowerCase().includes(q);
+      if (!matchQ) return false;
+      const isExpired  = l.days_left !== null && l.days_left !== undefined && l.days_left < 0;
+      const isExpiring = l.days_left !== null && l.days_left !== undefined && l.days_left >= 0 && l.days_left <= 7;
+      if (filter === 'active')   return l.is_active;
+      if (filter === 'inactive') return !l.is_active;
+      if (filter === 'bound')    return l.bound_device;
+      if (filter === 'unbound')  return !l.bound_device;
+      if (filter === 'expired')  return isExpired;
+      if (filter === 'expiring') return isExpiring;
+      return true;
+    });
+
+    const tbody = document.getElementById('license-table-body');
+    if (!currentLicList.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="9">কোনো license key পাওয়া যায়নি।</td></tr>'; return; }
+
+    tbody.innerHTML = currentLicList.map((l, i) => {
+      const statusBadge = l.is_active
+        ? '<span class="badge active"><span class="badge-dot"></span>ACTIVE</span>'
+        : '<span class="badge inactive"><span class="badge-dot"></span>INACTIVE</span>';
+      const boundBadge = l.bound_device
+        ? `<span class="badge bound" title="${escHtml(l.bound_device)}">🔗 BOUND</span><br><span style="font-size:9px;color:var(--muted)">${escHtml(l.bound_device.substring(0,12))}…</span>`
+        : '<span class="badge unbound">⚪ UNUSED</span>';
+
+      let validityHtml = '';
+      if (l.days_left === null || l.days_left === undefined) {
+        validityHtml = '<span class="days-pill lifetime">♾ Lifetime</span>';
+      } else if (l.days_left < 0) {
+        validityHtml = `<span class="days-pill expired">Expired</span>`;
+        if (l.expires_at) validityHtml += `<br><span style="font-size:9px;color:#666">${fmtDate(l.expires_at)}</span>`;
+      } else if (l.days_left <= 7) {
+        validityHtml = `<span class="days-pill warn">⚠ ${l.days_left}d left</span>`;
+        if (l.expires_at) validityHtml += `<br><span style="font-size:9px;color:var(--muted)">${fmtDate(l.expires_at)}</span>`;
+      } else {
+        validityHtml = `<span class="days-pill ok">✓ ${l.days_left}d left</span>`;
+        if (l.expires_at) validityHtml += `<br><span style="font-size:9px;color:var(--muted)">${fmtDate(l.expires_at)}</span>`;
+      }
+
+      const toggleBtn = l.is_active
+        ? `<button class="btn-toggle-off" onclick="toggleLicense(${i},0)">⛔ Off</button>`
+        : `<button class="btn-toggle-on"  onclick="toggleLicense(${i},1)">✅ On</button>`;
+      const unbindBtn = l.bound_device
+        ? `<button class="btn-unbind" onclick="unbindLicense(${i})">🔓</button>` : '';
+
+      return '<tr>'
+        + `<td style="color:var(--muted);font-size:11px">${i+1}</td>`
+        + `<td><div class="key-text">${escHtml(l.license_key)}</div></td>`
+        + `<td><span style="color:var(--yellow);font-size:12px;font-weight:700">${escHtml(l.display_name||'—')}</span></td>`
+        + `<td style="color:var(--muted);font-size:11px">${escHtml(l.label||'—')}</td>`
+        + `<td>${validityHtml}</td>`
+        + `<td>${boundBadge}</td>`
+        + `<td style="color:var(--muted);font-size:11px">${fmtTime(l.created_at)}</td>`
+        + `<td>${statusBadge}</td>`
+        + `<td style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">`
+        + `<button class="btn-edit" onclick="openEditModal(${i})">✏️ Edit</button>`
+        + toggleBtn + unbindBtn
+        + `<button class="btn-copy-key" onclick="copyKeyDirect('${escHtml(l.license_key)}',this)" style="font-size:9px">📋</button>`
+        + `<button class="btn-delete" onclick="deleteLicense(${i})">🗑</button>`
+        + '</td></tr>';
+    }).join('');
+  }
+
+  function openEditModal(i) {
+    const l = currentLicList[i]; if (!l) return;
+    pendingEditKey = l.license_key;
+    document.getElementById('edit-lic-key-info').textContent   = 'Key: ' + l.license_key;
+    document.getElementById('edit-display-name').value         = l.display_name || '';
+    document.getElementById('edit-label').value                = l.label        || '';
+    document.getElementById('edit-validity-days').value        = l.validity_days || '';
+    document.getElementById('edit-expires-at').value           = l.expires_at ? new Date(l.expires_at).toISOString().split('T')[0] : '';
+    document.getElementById('edit-lic-modal').classList.add('open');
+    setTimeout(() => document.getElementById('edit-display-name').focus(), 100);
+  }
+  function closeEditModal() { document.getElementById('edit-lic-modal').classList.remove('open'); pendingEditKey = ''; }
+
+  function confirmEditLicense() {
+    if (!pendingEditKey) { closeEditModal(); return; }
+    const displayName  = document.getElementById('edit-display-name').value.trim();
+    const label        = document.getElementById('edit-label').value.trim();
+    const validityDays = document.getElementById('edit-validity-days').value.trim();
+    const expiresAt    = document.getElementById('edit-expires-at').value.trim();
+    fetch(`${BASE}/api/admin/licenses/update?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ license_key:pendingEditKey, display_name:displayName, label, validity_days:validityDays?parseInt(validityDays):null, expires_at:expiresAt||null })
+    }).then(r => r.json()).then(d => {
+      if (d.error) { showToast('❌ '+d.error,true); return; }
+      showToast('✅ License updated!'); closeEditModal(); loadLicenses();
+    }).catch(() => showToast('❌ Error হয়েছে', true));
+  }
+
+  document.getElementById('edit-lic-modal').addEventListener('click', function(e) { if (e.target===this) closeEditModal(); });
+  document.getElementById('block-modal').addEventListener('click',    function(e) { if (e.target===this) closeModal(); });
+  document.getElementById('alias-modal').addEventListener('click',    function(e) { if (e.target===this) closeAliasModal(); });
+
+  function toggleLicense(i, newState) {
+    const l = currentLicList[i]; if (!l) return;
+    fetch(`${BASE}/api/admin/licenses/toggle?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({license_key:l.license_key, is_active:newState})
+    }).then(r => r.json()).then(d => {
+      if (d.error) { showToast('❌ '+d.error,true); return; }
+      showToast(newState ? '✅ Key activated' : '⛔ Key deactivated'); loadLicenses();
+    }).catch(() => showToast('❌ Error হয়েছে', true));
+  }
+
+  function unbindLicense(i) {
+    const l = currentLicList[i]; if (!l) return;
+    if (!confirm(`"${l.license_key}" এর device binding মুছে দেবেন?`)) return;
+    fetch(`${BASE}/api/license/unbind?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({license_key:l.license_key})
+    }).then(r => r.json()).then(d => {
+      if (d.error) { showToast('❌ '+d.error,true); return; }
+      showToast('🔓 Key unbound হয়েছে।'); loadLicenses();
+    }).catch(() => showToast('❌ Error হয়েছে', true));
+  }
+
+  function deleteLicense(i) {
+    const l = currentLicList[i]; if (!l) return;
+    if (!confirm('এই license key permanently delete করবেন?')) return;
+    fetch(`${BASE}/api/admin/licenses/delete?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({license_key:l.license_key})
+    }).then(r => r.json()).then(d => {
+      if (d.error) { showToast('❌ '+d.error,true); return; }
+      showToast('🗑 License key delete হয়েছে'); loadLicenses();
+    }).catch(() => showToast('❌ Error হয়েছে', true));
+  }
+
+  function copyKeyDirect(key, btn) {
+    navigator.clipboard.writeText(key).then(() => {
+      const orig = btn.textContent; btn.textContent = '✓';
+      setTimeout(() => btn.textContent = orig, 1500); showToast('📋 Key copied!');
+    });
+  }
+
+  // ══ ANNOUNCEMENT ══════════════════════════════════════
+  function updateAnnPreview() {
+    const v = document.getElementById('ann-message').value;
+    document.getElementById('ann-preview').textContent = v || 'এখানে আপনার message দেখাবে...';
+  }
+  function loadAnnouncement() {
+    fetch(`${BASE}/api/announcement`).then(r => r.json()).then(data => {
+      const on = data.enabled === true; const msg = data.message || '';
+      const statusEl = document.getElementById('ann-status-text');
+      const badgeEl  = document.getElementById('ann-badge');
+      statusEl.textContent     = on ? '🟢 Banner চালু আছে — সব user দেখছে' : '⚪ Banner বন্ধ আছে — app স্বাভাবিক';
+      statusEl.style.color     = on ? 'var(--green)' : 'var(--muted)';
+      badgeEl.textContent      = on ? 'ON' : 'OFF';
+      badgeEl.style.background = on ? '#052e16' : '#1a1a1a';
+      badgeEl.style.color      = on ? 'var(--green)' : 'var(--muted)';
+      badgeEl.style.border     = on ? '1px solid #166534' : '1px solid #2a2a2a';
+      if (msg) { document.getElementById('ann-message').value = msg; document.getElementById('ann-preview').textContent = msg; }
+    }).catch(() => {});
+  }
+  function saveAnnouncement(enable) {
+    const message = document.getElementById('ann-message').value.trim();
+    if (enable && !message) { showToast('❌ Message লিখুন আগে!', true); document.getElementById('ann-message').focus(); return; }
+    fetch(`${BASE}/api/admin/announcement?password=${encodeURIComponent(adminPw)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled:enable, message})
+    }).then(r => r.json()).then(d => {
+      if (d.error) { showToast('❌ '+d.error,true); return; }
+      showToast(enable ? '✅ Banner চালু! সব user দেখবে।' : '⛔ Banner বন্ধ করা হয়েছে।'); loadAnnouncement();
+    }).catch(() => showToast('❌ Server error!', true));
+  }
+
+  // ── HELPERS ───────────────────────────────────────────
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch { return iso; }
+  }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); } catch { return iso; }
+  }
+  function fmtAgo(iso) {
+    if (!iso) return '—';
+    try {
+      const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+      if (s < 10)    return 'just now';
+      if (s < 60)    return s + 's ago';
+      if (s < 3600)  return Math.floor(s/60) + ' min ago';
+      if (s < 86400) return Math.floor(s/3600) + ' hr ago';
+      return Math.floor(s/86400) + ' day ago';
+    } catch { return iso; }
+  }
+  function escHtml(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function showToast(msg, isError=false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = isError ? 'error' : '';
+    void t.offsetWidth; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // ── Init ──────────────────────────────────────────────
+  window.addEventListener('load', () => { setTimeout(lsUpdateStatusUI, 500); });
+  setInterval(lsUpdateStatusUI, 10000);
+</script>
+</body>
+</html>

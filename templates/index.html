@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LuckyLoop – Upload</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --green:  #00ff90;
+            --green2: #00cc72;
+            --bg:     #0a0a0a;
+            --bg2:    #0d0d0d;
+            --border: #1e1e1e;
+            --text:   #d0d0d0;
+            --muted:  #555;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 40px 36px;
+            width: 100%;
+            max-width: 460px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--green);
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .sub {
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+
+        input {
+            background: #111;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 14px;
+            padding: 11px 14px;
+            outline: none;
+            transition: border-color .2s;
+        }
+
+        input:focus { border-color: var(--green); }
+        input::placeholder { color: var(--muted); }
+
+        button {
+            background: var(--green);
+            border: none;
+            border-radius: 7px;
+            color: #000;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 12px;
+            transition: background .2s;
+            margin-top: 4px;
+        }
+
+        button:hover { background: var(--green2); }
+
+        #msg {
+            font-size: 13px;
+            min-height: 20px;
+            text-align: center;
+        }
+
+        .view-link {
+            display: block;
+            text-align: center;
+            font-size: 13px;
+            color: var(--muted);
+            text-decoration: none;
+            margin-top: 6px;
+            transition: color .2s;
+        }
+
+        .view-link:hover { color: var(--green); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="logo">🔸 LuckyLoop</div>
+    <p class="sub">Manual Job Data Upload</p>
+
+    <input id="job"       type="text" placeholder="Job Name  e.g. Image (1470)" autocomplete="off">
+    <input id="position"  type="text" placeholder="Position  e.g. 12/50"        autocomplete="off">
+    <input id="available" type="text" placeholder="Available  (auto-calculated if blank)" autocomplete="off">
+    <input id="link"      type="url"  placeholder="Campaign Link  https://…"    autocomplete="off">
+
+    <button id="btn" onclick="upload()">⬆ Upload to Server</button>
+    <p id="msg"></p>
+
+    <a href="/latest" class="view-link">📊 View Live Dashboard →</a>
+</div>
+<script>
+    async function upload() {
+        const btn = document.getElementById('btn');
+        const msg = document.getElementById('msg');
+        const job = document.getElementById('job').value.trim();
+
+        if (!job) {
+            msg.style.color = '#ff6060';
+            msg.textContent = '❌ Job name is required';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Uploading…';
+        msg.textContent = '';
+
+        try {
+            const res = await fetch('/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    job_name:  job,
+                    position:  document.getElementById('position').value.trim(),
+                    available: document.getElementById('available').value.trim(),
+                    link:      document.getElementById('link').value.trim(),
+                })
+            });
+
+            const data = await res.json();
+            if (data.status === 'saved') {
+                msg.style.color = '#00ff90';
+                msg.textContent = '✅ Saved: ' + data.job_name;
+                document.getElementById('job').value = '';
+                document.getElementById('position').value = '';
+                document.getElementById('available').value = '';
+                document.getElementById('link').value = '';
+            } else {
+                msg.style.color = '#ff6060';
+                msg.textContent = '❌ ' + (data.message || 'Unknown error');
+            }
+        } catch (e) {
+            msg.style.color = '#ff6060';
+            msg.textContent = '❌ Connection failed';
+        }
+
+        btn.disabled = false;
+        btn.textContent = '⬆ Upload to Server';
+    }
+</script>
+</body>
+</html>

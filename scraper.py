@@ -2,17 +2,14 @@ import requests
 import time
 import threading
 import os
-from bs4 import BeautifulSoup
-from datetime import datetime
 import functools
 
 print = functools.partial(print, flush=True)
 
 SERVER_URL = "https://luckyloop-ttrr.onrender.com"
-# নিরাপত্তা: কুকি এখন শুধু Render Environment (MW_PHPSESSID) থেকে পড়া হয়, কোডে কোনো ডিফল্ট নেই
+# এখন Microworkers এ লগইন ও ডেটা আনার কাজ করে ফোনের ব্রাউজার এক্সটেনশন (LuckyLoop Sync)।
+# তাই সার্ভারে কোনো কুকি লাগে না। নিচের লাইনটা শুধু পুরোনো কোডের সামঞ্জস্যের জন্য।
 PHPSESSID  = os.environ.get("MW_PHPSESSID", "").strip()
-if not PHPSESSID:
-    print("[Config] MW_PHPSESSID সেট করা নেই! Render Environment এ দিন।")
 
 # ── ntfy নোটিফিকেশন ──────────────────────────────────
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
@@ -200,6 +197,11 @@ def check_paid_change(new):
         print("[notify] Failed, will retry on next check")
 # ═════════════════════════════════════════════════════
 
+# ═════════════════════════════════════════════════════
+# সার্ভার এখন শুধু এক্সটেনশনের পাঠানো Tasks paid দেখে, বাড়লে নোটিফিকেশন পাঠায়।
+# ═════════════════════════════════════════════════════
+
+# (সামঞ্জস্যের জন্য রাখা; এক্সটেনশনেও একই তালিকা আছে)
 JOB_NAMES = [
     {"full": "TTV-Data Entry - PC required. Not for mobile phones. (E766-1470)", "short": "1470"},
     {"full": "TTV-Data Entry from images (E502-1033)",                            "short": "1033"},
@@ -209,15 +211,6 @@ JOB_NAMES = [
     {"full": "TTV-Data Entry (E766-1469sv)",                                      "short": "1469"},
     {"full": "TTV-Data Entry from images (E502-1001)",                            "short": "1001"},
 ]
-
-TARGET_URL = "https://www.microworkers.com/jobs.php?Filter=no&Sort=NEWEST&Id_category=09"
-EMPLOYER_URL = "https://www.microworkers.com/userinfo.php?Id=4b256e28"
-
-session = requests.Session()
-session.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Cookie": f"PHPSESSID={PHPSESSID}"
-})
 
 def calc_available(pos_str):
     try:
@@ -236,51 +229,6 @@ def update_status(status, message):
     except Exception as e:
         print(f"[Status Error] {e}")
 
-def is_blocked(r, soup):
-    """Cloudflare ব্লক পেজ কিনা চেক করো (403 বা 'Cloudflare' টাইটেল)"""
-    title = soup.title.get_text(strip=True) if soup.title else ""
-    return r.status_code in (403, 429, 503) and ("Cloudflare" in title or "Cloudflare" in r.text[:3000]) \
-        or "Attention Required" in title
-
-def scrape_jobs():
-    try:
-        r = session.get(TARGET_URL, timeout=20)
-        soup = BeautifulSoup(r.text, "html.parser")
-        listings = soup.select(".jobslist")
-        count = len(listings)
-        print(f"[Scraper] Found {count} listings")
-
-        if count == 0:
-            # ── ডিবাগ: আসলে সাইট কী পাঠাচ্ছে সেটা লগে দেখাও ──
-            page_title = soup.title.get_text(strip=True) if soup.title else None
-            print(f"[Debug] status={r.status_code} url={r.url} len={len(r.text)}")
-            print(f"[Debug] title={page_title!r}")
-            print(f"[Debug] head={r.text[:300]!r}")
-            if is_blocked(r, soup):
-                update_status("error", "🚫 Cloudflare ব্লক (403): এই সার্ভারের আইপি ব্লকড। পিসি থেকে স্ক্র্যাপার চালান।")
-            else:
-                update_status("expired", "⚠️ PHPSESSID Expired! Render এ নতুন Cookie দিন।")
-            return
-
-        update_status("ok", f"✅ Running | {count} listings found")
-
-        for job in JOB_NAMES:
-            for item in listings:
-                name_el = item.select_one(".jobname a")
-                pos_el  = item.select_one(".jobdone p")
-                if not name_el or not pos_el:
-                    continue
-                if name_el.get_text(strip=True) == job["full"]:
-                    position  = pos_el.get_text(strip=True)
-                    available = calc_available(position)
-                    link      = name_el.get("href", TARGET_URL)
-                    push(job["short"], position, available, link)
-                    break
-
-    except Exception as e:
-        print(f"[Scraper] Error: {e}")
-        update_status("error", f"❌ Error: {str(e)[:80]}")
-
 def push(cid, position, available, link):
     try:
         requests.post(f"{SERVER_URL}/save", json={
@@ -293,106 +241,87 @@ def push(cid, position, available, link):
     except Exception as e:
         print(f"[Scraper] Push error: {e}")
 
-# ══════════════════════════════════════════════════════
-# TASKS PAID TRACKER — প্রতি ১ মিনিটে scrape করবে
-# ══════════════════════════════════════════════════════
+# কত সেকেন্ড পর পর সার্ভার নিজের Tasks paid মান দেখবে
+WATCH_INTERVAL = max(_int_env("WATCH_INTERVAL_SEC", 20), 5)
 
-def scrape_tasks_paid():
-    """microworkers.com/userinfo.php?Id=4b256e28 থেকে Tasks paid নাও"""
-    try:
-        r = session.get(EMPLOYER_URL, timeout=20)
-        soup = BeautifulSoup(r.text, "html.parser")
-        if is_blocked(r, soup):
-            print(f"[TasksPaid] Cloudflare blocked (status={r.status_code}) — skipped")
-            return
+def _find_paid(obj):
+    """JSON এর ভেতর থেকে 'paid' নামের কী-র সংখ্যা খোঁজো"""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if "paid" in str(k).lower():
+                if isinstance(v, bool):
+                    continue
+                if isinstance(v, (int, float)):
+                    return int(v)
+                if isinstance(v, str) and v.replace(",", "").strip().isdigit():
+                    return int(v.replace(",", "").strip())
+        for v in obj.values():
+            r = _find_paid(v)
+            if r is not None:
+                return r
+    elif isinstance(obj, list):
+        for v in obj:
+            r = _find_paid(v)
+            if r is not None:
+                return r
+    return None
 
-        # "Tasks paid" row খুঁজো — HG Campaigns section এ
-        tasks_paid = None
-        rows = soup.select("table tr")
-        for row in rows:
-            cells = row.find_all(["th", "td"])
-            for i, cell in enumerate(cells):
-                if "Tasks paid" in cell.get_text():
-                    # পরের cell এ number আছে
-                    if i + 1 < len(cells):
-                        val = cells[i + 1].get_text(strip=True).replace(",", "").replace(".", "")
-                        if val.isdigit():
-                            tasks_paid = int(val)
-                            break
-            if tasks_paid is not None:
-                break
+def _find_big_int(obj):
+    """কী-র নামে না মিললে: প্রথম বড় (>10000) পূর্ণসংখ্যা নাও"""
+    if isinstance(obj, bool):
+        return None
+    if isinstance(obj, int):
+        return obj if obj > 10000 else None
+    if isinstance(obj, dict):
+        for v in obj.values():
+            r = _find_big_int(v)
+            if r is not None:
+                return r
+    elif isinstance(obj, list):
+        for v in obj:
+            r = _find_big_int(v)
+            if r is not None:
+                return r
+    return None
 
-        # Alternative: সব text থেকে খোঁজো
-        if tasks_paid is None:
-            text = soup.get_text()
-            lines = text.split("\n")
-            for i, line in enumerate(lines):
-                if "Tasks paid" in line:
-                    # পরের non-empty line এ number থাকতে পারে
-                    for j in range(i+1, min(i+5, len(lines))):
-                        val = lines[j].strip().replace(",", "").replace(".", "")
-                        if val.isdigit() and len(val) > 4:
-                            tasks_paid = int(val)
-                            break
-                    if tasks_paid:
-                        break
+_raw_logged = False
 
-        if tasks_paid is None:
-            print("[TasksPaid] Could not find Tasks paid value")
-            return
+def fetch_tasks_paid():
+    """নিজের সার্ভার থেকে সর্বশেষ Tasks paid নাও (এক্সটেনশন এটা POST করে রেখেছে)"""
+    global _raw_logged
+    r = requests.get(f"{SERVER_URL}/api/tasks-paid", timeout=10)
+    if r.status_code != 200:
+        print(f"[Notifier] /api/tasks-paid HTTP {r.status_code}")
+        return None
+    if not _raw_logged:
+        print(f"[Notifier] /api/tasks-paid -> {r.text[:200]}")
+        _raw_logged = True
+    data = r.json()
+    value = _find_paid(data)
+    if value is None:
+        value = _find_big_int(data)
+    return value
 
-        print(f"[TasksPaid] Current: {tasks_paid:,}")
-
-        # সংখ্যা বাড়লে ফোনে নোটিফিকেশন পাঠাও
-        check_paid_change(tasks_paid)
-
-        # Server এ push করো
-        try:
-            requests.post(f"{SERVER_URL}/api/tasks-paid", json={
-                "tasks_paid": tasks_paid
-            }, timeout=10)
-            print(f"[TasksPaid] Pushed: {tasks_paid:,}")
-        except Exception as e:
-            print(f"[TasksPaid] Push error: {e}")
-
-    except Exception as e:
-        print(f"[TasksPaid] Scrape error: {e}")
-
-
-def scrape_loop():
-    print("[Scraper] Starting — checking at sec 2, 4, 33...")
+def watch_loop():
+    print("[Notifier] Starting — এক্সটেনশনের পাঠানো Tasks paid দেখছে...")
     print(f"[notify] pushover: {bool(PO_USER and PO_TOKEN)} | ntfy: {bool(NTFY_TOPIC)} | telegram: {bool(TG_TOKEN and TG_CHAT)} | interval: {NOTIFY_INTERVAL}s | priority: {PO_PRIORITY}")
-    send_notification("Scraper started", "LuckyLoop scraper চালু হয়েছে (test)", priority=0)
+    send_notification("LuckyLoop", "নোটিফায়ার চালু হয়েছে (test)", priority=0)
     time.sleep(5)
-    CHECK_SECONDS = {3, 33}
-    last_checked_sec = -1
-
-    # Tasks paid — আলাদা counter
-    last_tasks_paid_check = 0
-
+    warned = False
     while True:
-        now = datetime.now()
-        sec = now.second
-
-        # Jobs scrape — sec 2, 4, 33 এ
-        if sec in CHECK_SECONDS and sec != last_checked_sec:
-            last_checked_sec = sec
-            print(f"[Scraper] Checking at :{sec:02d}")
-            scrape_jobs()
-
-        # Tasks paid — প্রতি ৬০ সেকেন্ডে
-        current_time = time.time()
-        if current_time - last_tasks_paid_check >= 60:
-            last_tasks_paid_check = current_time
-            print(f"[TasksPaid] Checking at {now.strftime('%H:%M:%S')}")
-            scrape_tasks_paid()
-
-        time.sleep(0.5)
+        try:
+            value = fetch_tasks_paid()
+            if value is None or value <= 0:
+                if not warned:
+                    print("[Notifier] Tasks paid সংখ্যা এখনো পাওয়া যায়নি (এক্সটেনশন চালু আছে তো?)")
+                    warned = True
+            else:
+                warned = False
+                check_paid_change(value)
+        except Exception as e:
+            print(f"[Notifier] Error: {type(e).__name__}: {e}")
+        time.sleep(WATCH_INTERVAL)
 
 def start_scraper():
-    # Render এ DISABLE_SCRAPER=1 দিলে এখানে স্ক্র্যাপার চলবে না (পিসি থেকে চালানোর সময়)
-    if os.environ.get("DISABLE_SCRAPER", "").strip() == "1":
-        print("[Scraper] Disabled on this server (DISABLE_SCRAPER=1)")
-        return
-    t = threading.Thread(target=scrape_loop, daemon=True)
+    t = threading.Thread(target=watch_loop, daemon=True)
     t.start()

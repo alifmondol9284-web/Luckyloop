@@ -9,7 +9,10 @@ import functools
 print = functools.partial(print, flush=True)
 
 SERVER_URL = "https://luckyloop-ttrr.onrender.com"
-PHPSESSID  = os.environ.get("MW_PHPSESSID", "9vvojr5nik7ptb099ea9poqbsk")
+# নিরাপত্তা: কুকি এখন শুধু Render Environment (MW_PHPSESSID) থেকে পড়া হয়, কোডে কোনো ডিফল্ট নেই
+PHPSESSID  = os.environ.get("MW_PHPSESSID", "").strip()
+if not PHPSESSID:
+    print("[Config] MW_PHPSESSID সেট করা নেই! Render Environment এ দিন।")
 
 # ── ntfy নোটিফিকেশন ──────────────────────────────────
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
@@ -242,6 +245,11 @@ def scrape_jobs():
         print(f"[Scraper] Found {count} listings")
 
         if count == 0:
+            # ── ডিবাগ: আসলে সাইট কী পাঠাচ্ছে সেটা লগে দেখাও ──
+            page_title = soup.title.get_text(strip=True) if soup.title else None
+            print(f"[Debug] status={r.status_code} url={r.url} len={len(r.text)}")
+            print(f"[Debug] title={page_title!r}")
+            print(f"[Debug] head={r.text[:300]!r}")
             update_status("expired", "⚠️ PHPSESSID Expired! Render এ নতুন Cookie দিন।")
             return
 

@@ -9,7 +9,10 @@ import functools
 print = functools.partial(print, flush=True)
 
 SERVER_URL = "https://luckyloop-ttrr.onrender.com"
-PHPSESSID  = os.environ.get("MW_PHPSESSID", "p9l0258fbk15g7pda9i1ibpupb")
+# নিরাপত্তা: কুকি এখন শুধু Render Environment (MW_PHPSESSID) থেকে পড়া হয়, কোডে কোনো ডিফল্ট নেই
+PHPSESSID  = os.environ.get("MW_PHPSESSID", "").strip()
+if not PHPSESSID:
+    print("[Config] MW_PHPSESSID সেট করা নেই! Render Environment এ দিন।")
 
 # ── ntfy নোটিফিকেশন ──────────────────────────────────
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
@@ -233,6 +236,12 @@ def update_status(status, message):
     except Exception as e:
         print(f"[Status Error] {e}")
 
+def is_blocked(r, soup):
+    """Cloudflare ব্লক পেজ কিনা চেক করো (403 বা 'Cloudflare' টাইটেল)"""
+    title = soup.title.get_text(strip=True) if soup.title else ""
+    return r.status_code in (403, 429, 503) and ("Cloudflare" in title or "Cloudflare" in r.text[:3000]) \
+        or "Attention Required" in title
+
 def scrape_jobs():
     try:
         r = session.get(TARGET_URL, timeout=20)
@@ -242,7 +251,15 @@ def scrape_jobs():
         print(f"[Scraper] Found {count} listings")
 
         if count == 0:
-            update_status("expired", "⚠️ PHPSESSID Expired! Render এ নতুন Cookie দিন।")
+            # ── ডিবাগ: আসলে সাইট কী পাঠাচ্ছে সেটা লগে দেখাও ──
+            page_title = soup.title.get_text(strip=True) if soup.title else None
+            print(f"[Debug] status={r.status_code} url={r.url} len={len(r.text)}")
+            print(f"[Debug] title={page_title!r}")
+            print(f"[Debug] head={r.text[:300]!r}")
+            if is_blocked(r, soup):
+                update_status("error", "🚫 Cloudflare ব্লক (403): এই সার্ভারের আইপি ব্লকড। পিসি থেকে স্ক্র্যাপার চালান।")
+            else:
+                update_status("expired", "⚠️ PHPSESSID Expired! Render এ নতুন Cookie দিন।")
             return
 
         update_status("ok", f"✅ Running | {count} listings found")
@@ -285,6 +302,9 @@ def scrape_tasks_paid():
     try:
         r = session.get(EMPLOYER_URL, timeout=20)
         soup = BeautifulSoup(r.text, "html.parser")
+        if is_blocked(r, soup):
+            print(f"[TasksPaid] Cloudflare blocked (status={r.status_code}) — skipped")
+            return
 
         # "Tasks paid" row খুঁজো — HG Campaigns section এ
         tasks_paid = None
@@ -370,5 +390,9 @@ def scrape_loop():
         time.sleep(0.5)
 
 def start_scraper():
+    # Render এ DISABLE_SCRAPER=1 দিলে এখানে স্ক্র্যাপার চলবে না (পিসি থেকে চালানোর সময়)
+    if os.environ.get("DISABLE_SCRAPER", "").strip() == "1":
+        print("[Scraper] Disabled on this server (DISABLE_SCRAPER=1)")
+        return
     t = threading.Thread(target=scrape_loop, daemon=True)
     t.start()

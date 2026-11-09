@@ -9,7 +9,7 @@ import functools
 print = functools.partial(print, flush=True)
 
 SERVER_URL = "https://luckyloop-q9kk.onrender.com"
-PHPSESSID  = os.environ.get("MW_PHPSESSID", "nacpioqpda68ms139o4u4phfb2")
+PHPSESSID  = os.environ.get("MW_PHPSESSID", "mlclm9bb5j5dm9b1ns0o6d8b93")
 
 # ── ntfy নোটিফিকেশন ──────────────────────────────────
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()

@@ -2,6 +2,9 @@ import requests
 import time
 import threading
 import os
+import re
+import traceback
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from datetime import datetime
 import functools
@@ -9,7 +12,39 @@ import functools
 print = functools.partial(print, flush=True)
 
 SERVER_URL = "https://luckyloop-q9kk.onrender.com"
-PHPSESSID  = os.environ.get("MW_PHPSESSID", "mlclm9bb5j5dm9b1ns0o6d8b93")
+
+# ══════════════════════════════════════════════════════
+# Microworkers Cookie — শুধু Render Environment থেকে আসবে
+# (কোডে কোনো cookie লিখে রাখবেন না, GitHub-এ গেলে অন্যে দেখে ফেলবে)
+#   MW_COOKIE_FULL = ব্রাউজারের পুরো Cookie লাইন (সবচেয়ে ভালো)
+#   MW_PHPSESSID   = শুধু PHPSESSID এর value (বিকল্প)
+#   MW_USER_AGENT  = ব্রাউজারের navigator.userAgent
+# ══════════════════════════════════════════════════════
+def _clean_cookie_text(s):
+    """কপির সময় ঢুকে যাওয়া নতুন লাইন, quote আর শুরুর 'cookie' লেখা বাদ দাও"""
+    s = (s or "").replace("\r", " ").replace("\n", " ").strip().strip('"\'').strip()
+    s = re.sub(r"^cookie(?::\s*|\s+)(?=[\w\-]+=)", "", s, flags=re.I)
+    return s.strip().strip('"\'').strip()
+
+def parse_cookie_string(s):
+    """'a=1; b=2' থেকে {'a': '1', 'b': '2'} বানাও"""
+    out = {}
+    for part in (s or "").split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        k, v = part.split("=", 1)
+        out[k.strip()] = v.strip()
+    return out
+
+PHPSESSID = _clean_cookie_text(os.environ.get("MW_PHPSESSID", "mlclm9bb5j5dm9b1ns0o6d8b93"))
+if PHPSESSID.upper().startswith("PHPSESSID="):      # ভুল করে নামসহ বসালে
+    PHPSESSID = PHPSESSID.split("=", 1)[1].strip()
+FULL_COOKIE = _clean_cookie_text(os.environ.get("MW_COOKIE_FULL", ""))
+USER_AGENT = os.environ.get("MW_USER_AGENT", "").strip().strip('"\'').strip() or (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+)
 
 # ── ntfy নোটিফিকেশন ──────────────────────────────────
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
@@ -210,11 +245,116 @@ JOB_NAMES = [
 TARGET_URL = "https://www.microworkers.com/jobs.php?Filter=no&Sort=NEWEST&Id_category=09"
 EMPLOYER_URL = "https://www.microworkers.com/userinfo.php?Id=4b256e28"
 
+# ── Session: cookie গুলো "cookie jar"-এ বসানো হয় (ব্রাউজারের মতো)।
+#    আলাদা Cookie header দিলে requests লাইব্রেরি redirect বা Set-Cookie এর পর
+#    সেটা বদলে ফেলতে পারে, তাই jar-ই নিরাপদ।
 session = requests.Session()
 session.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Cookie": f"PHPSESSID={PHPSESSID}"
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Upgrade-Insecure-Requests": "1",
 })
+
+COOKIE_DOMAIN = ".microworkers.com"
+
+def load_cookies():
+    pairs = parse_cookie_string(FULL_COOKIE) if FULL_COOKIE else {}
+    if not pairs and PHPSESSID:
+        pairs = {"PHPSESSID": PHPSESSID}
+    for k, v in pairs.items():
+        session.cookies.set(k, v, domain=COOKIE_DOMAIN, path="/")
+    return pairs
+
+COOKIES_LOADED = load_cookies()
+
+# ══════════════════════════════════════════════════════
+# ডায়াগনোসিস — সমস্যা কী সেটা Render Logs-এ দেখানোর জন্য
+# (cookie-র value কখনো print হয় না, শুধু নাম)
+# ══════════════════════════════════════════════════════
+REASONS = {
+    "BLOCKED":     "Cloudflare/সাইট Render-এর request আটকাচ্ছে (HTTP {status})",
+    "LOGIN":       "Microworkers লগইন পেজ দেখাচ্ছে — cookie চিনছে না, Render-এ নতুন MW_COOKIE_FULL দিন",
+    "NO_JOBSLIST": "পেজ খুলেছে কিন্তু .jobslist পাওয়া যায়নি (HTTP {status}) — layout বদলেছে?",
+}
+
+_fail = {"reason": None, "count": 0}
+
+def detect_problem(r):
+    """রেসপন্স দেখে BLOCKED / LOGIN / None বলো"""
+    low = r.text.lower()
+    path = urlparse(r.url).path.lower()
+    if (r.status_code in (403, 429, 503) or r.headers.get("cf-mitigated")
+            or "just a moment" in low or "attention required" in low or "cf_chl_opt" in low):
+        return "BLOCKED"
+    if "login" in path or 'type="password"' in low or "type='password'" in low:
+        return "LOGIN"
+    return None
+
+def analyze_page(r):
+    soup = BeautifulSoup(r.text, "html.parser")
+    listings = soup.select(".jobslist")
+    title = (soup.title.get_text(strip=True) if soup.title else "no-title")[:80]
+    code = "OK" if listings else (detect_problem(r) or "NO_JOBSLIST")
+    return {"code": code, "soup": soup, "listings": listings, "title": title}
+
+def print_diag(label, r, info):
+    soup = info["soup"]
+    hops = [h.status_code for h in r.history]
+    sent = sorted(parse_cookie_string(r.request.headers.get("Cookie", "")).keys())
+    set_by_server = sorted({k for resp in list(r.history) + [r] for k in resp.cookies.keys()})
+    print(f"[Diag:{label}] ফলাফল={info['code']} | HTTP={r.status_code} | redirect={hops} | final_url={r.url}")
+    print(f"[Diag:{label}] title={info['title']!r} | bytes={len(r.text)} | server={r.headers.get('Server', '-')} "
+          f"| cf-ray={r.headers.get('CF-RAY', '-')} | cf-mitigated={r.headers.get('cf-mitigated', '-')}")
+    print(f"[Diag:{label}] পাঠানো cookie-র নাম={sent} | সার্ভার নতুন সেট করেছে={set_by_server}")
+    if info["code"] in ("BLOCKED", "LOGIN"):
+        snippet = " ".join(soup.get_text(" ", strip=True).split())[:150]
+        print(f"[Diag:{label}] পেজের লেখা={snippet!r}")
+    elif info["code"] == "NO_JOBSLIST":
+        classes = sorted({c for el in soup.select('[class*=job]') for c in (el.get("class") or [])})[:15]
+        print(f"[Diag:{label}] job সম্পর্কিত class={classes}")
+
+def _should_print_full(code):
+    """একই সমস্যা বারবার হলে পুরো ডায়াগনোসিস প্রতি ১০ বারে একবার"""
+    if _fail["reason"] != code:
+        _fail["reason"] = code
+        _fail["count"] = 1
+        return True
+    _fail["count"] += 1
+    return _fail["count"] % 10 == 1
+
+def startup_diagnostics():
+    print("=" * 60)
+    if FULL_COOKIE:
+        source = "MW_COOKIE_FULL"
+    elif PHPSESSID:
+        source = "MW_PHPSESSID (শুধু একটা cookie — Cloudflare থাকলে যথেষ্ট নাও হতে পারে)"
+    else:
+        source = "❌ কোনো cookie সেট নেই! Render Environment-এ MW_COOKIE_FULL দিন"
+    print(f"[Startup] cookie উৎস: {source}")
+    print(f"[Startup] cookie নাম (value না): {sorted(COOKIES_LOADED.keys())}")
+    if COOKIES_LOADED and "PHPSESSID" not in COOKIES_LOADED:
+        print("[Startup] ⚠️ cookie-র মধ্যে PHPSESSID নেই!")
+    if COOKIES_LOADED and "cf_clearance" not in COOKIES_LOADED:
+        print("[Startup] ⚠️ cf_clearance নেই — Cloudflare আটকাতে পারে")
+    env_keys = sorted(k for k in os.environ
+                      if any(w in k.upper() for w in ("MW_", "PHPSESS", "COOKIE", "USER_AGENT")))
+    print(f"[Startup] Render env var-এর নাম (MW/PHPSESSID/COOKIE সংক্রান্ত): {env_keys}")
+    print(f"[Startup] User-Agent: {USER_AGENT}")
+    try:
+        ip = requests.get("https://api.ipify.org", timeout=5).text.strip()
+        print(f"[Startup] Render-এর বাইরের IP (Microworkers এটাই দেখে): {ip}")
+    except Exception as e:
+        print(f"[Startup] IP জানা গেল না: {type(e).__name__}")
+    # একবার jobs পেজ খুলে পুরো রিপোর্ট
+    try:
+        r = session.get(TARGET_URL, timeout=20)
+        info = analyze_page(r)
+        print(f"[Startup] jobs পেজ টেস্ট: {info['code']} ({len(info['listings'])} listings)")
+        print_diag("startup", r, info)
+    except Exception as e:
+        print(f"[Startup] jobs পেজ টেস্ট ব্যর্থ: {type(e).__name__}: {e}")
+    print("=" * 60)
 
 def calc_available(pos_str):
     try:
@@ -236,15 +376,29 @@ def update_status(status, message):
 def scrape_jobs():
     try:
         r = session.get(TARGET_URL, timeout=20)
-        soup = BeautifulSoup(r.text, "html.parser")
-        listings = soup.select(".jobslist")
+        info = analyze_page(r)
+        listings = info["listings"]
         count = len(listings)
-        print(f"[Scraper] Found {count} listings")
 
-        if count == 0:
-            update_status("expired", "⚠️ PHPSESSID Expired! Render এ নতুন Cookie দিন।")
+        if info["code"] != "OK":
+            reason = REASONS[info["code"]].format(status=r.status_code)
+            if _should_print_full(info["code"]):
+                print(f"[Scraper] ❌ Found 0 listings — {reason}")
+                print_diag("jobs", r, info)
+            else:
+                print(f"[Scraper] ❌ Found 0 listings — {info['code']} (একই সমস্যা, #{_fail['count']}) HTTP {r.status_code}")
+            # শুধু লগইন চিনতে না পারলেই "expired", বাকিগুলো "error"
+            if info["code"] == "LOGIN":
+                update_status("expired", f"⚠️ {reason}")
+            else:
+                update_status("error", f"⛔ {reason}")
             return
 
+        if _fail["reason"] is not None:
+            print(f"[Scraper] ✅ আবার ঠিক হয়েছে (আগের সমস্যা: {_fail['reason']})")
+            _fail["reason"] = None
+            _fail["count"] = 0
+        print(f"[Scraper] Found {count} listings | HTTP {r.status_code}")
         update_status("ok", f"✅ Running | {count} listings found")
 
         for job in JOB_NAMES:
@@ -261,8 +415,9 @@ def scrape_jobs():
                     break
 
     except Exception as e:
-        print(f"[Scraper] Error: {e}")
-        update_status("error", f"❌ Error: {str(e)[:80]}")
+        print(f"[Scraper] Error: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        update_status("error", f"❌ Error: {type(e).__name__}: {str(e)[:70]}")
 
 def push(cid, position, available, link):
     try:
@@ -318,7 +473,10 @@ def scrape_tasks_paid():
                         break
 
         if tasks_paid is None:
-            print("[TasksPaid] Could not find Tasks paid value")
+            problem = detect_problem(r) or "NOT_FOUND"
+            title = (soup.title.get_text(strip=True) if soup.title else "no-title")[:80]
+            print(f"[TasksPaid] ❌ Tasks paid পাওয়া যায়নি | কারণ={problem} | HTTP {r.status_code} "
+                  f"| final_url={r.url} | title={title!r} | bytes={len(r.text)}")
             return
 
         print(f"[TasksPaid] Current: {tasks_paid:,}")
@@ -336,12 +494,13 @@ def scrape_tasks_paid():
             print(f"[TasksPaid] Push error: {e}")
 
     except Exception as e:
-        print(f"[TasksPaid] Scrape error: {e}")
+        print(f"[TasksPaid] Scrape error: {type(e).__name__}: {e}")
 
 
 def scrape_loop():
-    print("[Scraper] Starting — checking at sec 2, 4, 33...")
+    print("[Scraper] Starting — checking at sec 3, 33...")
     print(f"[notify] pushover: {bool(PO_USER and PO_TOKEN)} | ntfy: {bool(NTFY_TOPIC)} | telegram: {bool(TG_TOKEN and TG_CHAT)} | interval: {NOTIFY_INTERVAL}s | priority: {PO_PRIORITY}")
+    startup_diagnostics()
     send_notification("Scraper started", "LuckyLoop scraper চালু হয়েছে (test)", priority=0)
     time.sleep(5)
     CHECK_SECONDS = {3, 33}
@@ -354,7 +513,7 @@ def scrape_loop():
         now = datetime.now()
         sec = now.second
 
-        # Jobs scrape — sec 2, 4, 33 এ
+        # Jobs scrape — sec 3, 33 এ
         if sec in CHECK_SECONDS and sec != last_checked_sec:
             last_checked_sec = sec
             print(f"[Scraper] Checking at :{sec:02d}")
